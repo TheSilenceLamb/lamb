@@ -3,34 +3,943 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>教师工作台</title>
-    <!-- 引入 Tailwind CSS 方便快速搞定好看的 UI -->
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-slate-100 min-h-screen p-6">
-    <div class="max-w-4xl mx-auto bg-white p-8 rounded-xl shadow-md">
-        <h1 class="text-3xl font-bold text-slate-800 mb-4">🍎 教师工作台</h1>
-        <p class="text-slate-600 mb-6">欢迎使用！这里是你的专属工作空间。</p>
+    <title>小学教师本地工作台</title>
+    <style>
+        :root {
+            --primary: #4A7C59;
+            --primary-light: #EAF2EC;
+            --bg: #F8F9FA;
+            --surface: #FFFFFF;
+            --text: #2C3E50;
+            --border: #E2E8F0;
+            --danger: #E53E3E;
+            --success: #38A169;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        body { background: var(--bg); color: var(--text); display: flex; height: 100vh; overflow: hidden; }
+
+        /* 侧边导航 */
+        .sidebar { width: 250px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+        .sidebar-header { padding: 20px; font-size: 18px; font-weight: bold; color: var(--primary); border-bottom: 1px solid var(--border); background: var(--primary-light); }
+        .nav-list { overflow-y: auto; flex: 1; padding: 10px 0; }
+        .nav-item { padding: 12px 20px; display: block; width: 100%; text-align: left; background: none; border: none; font-size: 14px; color: var(--text); cursor: pointer; transition: 0.2s; }
+        .nav-item:hover, .nav-item.active { background: var(--primary-light); color: var(--primary); font-weight: bold; border-left: 4px solid var(--primary); }
+
+        /* 主内容区 */
+        .main-content { flex: 1; overflow-y: auto; padding: 25px; position: relative; }
+        .module-page { display: none; }
+        .module-page.active { display: block; }
         
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div class="p-4 bg-blue-50 rounded-lg border border-blue-100">
-                <h3 class="font-bold text-blue-800">今天课程</h3>
-                <p class="text-2xl font-bold text-blue-600 mt-2">4 节</p>
+        .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid var(--primary-light); }
+        .page-title { font-size: 22px; color: var(--primary); }
+
+        /* 基础 UI 组件 */
+        .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .card { background: var(--surface); padding: 20px; border-radius: 8px; border: 1px solid var(--border); box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+        .card h3 { font-size: 16px; margin-bottom: 10px; color: var(--primary); }
+
+        table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 8px; overflow: hidden; border: 1px solid var(--border); margin-bottom: 20px; }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid var(--border); font-size: 14px; }
+        th { background: var(--primary-light); color: var(--primary); font-weight: 600; }
+        tr:hover { background: #F1F5F9; }
+
+        .btn { padding: 8px 16px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; transition: 0.2s; }
+        .btn:hover { opacity: 0.9; }
+        .btn-secondary { background: #64748B; }
+        .btn-danger { background: var(--danger); }
+        .btn-sm { padding: 4px 8px; font-size: 12px; }
+
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-size: 13px; font-weight: 600; }
+        .form-control { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 4px; font-size: 14px; }
+        textarea.form-control { resize: vertical; min-height: 80px; }
+
+        .progress-bar { width: 100%; height: 20px; background: var(--border); border-radius: 10px; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--primary); transition: width 0.3s; }
+
+        .export-box { margin-top: 15px; background: #FFFBEB; padding: 15px; border: 1px solid #FCD34D; border-radius: 6px; }
+    </style>
+</head>
+<body>
+
+    <!-- 侧边导航栏 -->
+    <div class="sidebar">
+        <div class="sidebar-header">🏫 教师工作台</div>
+        <div class="nav-list" id="navList"></div>
+    </div>
+
+    <!-- 主内容区 -->
+    <div class="main-content" id="mainContent">
+
+        <!-- 首页导航面板 -->
+        <div id="page-dashboard" class="module-page active">
+            <div class="page-header"><h2 class="page-title">工作台首页</h2></div>
+            
+            <!-- 节假日倒计时组件 -->
+            <div class="card-grid">
+                <div class="card" style="grid-column: span 2;">
+                    <h3>🎉 节假日倒计时</h3>
+                    <div style="display: flex; gap: 15px; flex-wrap: wrap;" id="holidayWidget"></div>
+                </div>
+                <div class="card">
+                    <h3>💾 数据管理</h3>
+                    <p style="font-size:12px; color:#666; margin-bottom:10px;">所有数据仅保存在本电脑浏览器中。</p>
+                    <button class="btn" onclick="exportAllData()">导出备份(JSON)</button>
+                    <button class="btn btn-secondary" onclick="document.getElementById('importFile').click()">导入备份</button>
+                    <input type="file" id="importFile" style="display:none" onchange="importAllData(event)">
+                </div>
             </div>
-            <div class="p-4 bg-green-50 rounded-lg border border-green-100">
-                <h3 class="font-bold text-green-800">待批改作业</h3>
-                <p class="text-2xl font-bold text-green-600 mt-2">12 份</p>
-            </div>
-            <div class="p-4 bg-purple-50 rounded-lg border border-purple-100">
-                <h3 class="font-bold text-purple-800">重要通知</h3>
-                <p class="text-2xl font-bold text-purple-600 mt-2">2 条</p>
+
+            <h3 style="margin-bottom:15px; color:var(--primary)">快捷功能入口</h3>
+            <div class="card-grid" id="quickNav"></div>
+        </div>
+
+        <!-- 1. 座位调节模块 -->
+        <div id="page-seating" class="module-page">
+            <div class="page-header"><h2 class="page-title">座位调节与记录</h2></div>
+            <div style="display: flex; gap:20px;">
+                <div class="card" style="width: 300px;">
+                    <h3>添加/编辑座位区</h3>
+                    <div class="form-group"><label>学生姓名</label><input type="text" id="seatStudent" class="form-control"></div>
+                    <div class="form-group"><label>排（1-6）</label><input type="number" id="seatRow" class="form-control"></div>
+                    <div class="form-group"><label>列（1-6）</label><input type="number" id="seatCol" class="form-control"></div>
+                    <button class="btn" onclick="saveSeat()">更新位置</button>
+                </div>
+                <div style="flex:1;">
+                    <div class="card">
+                        <h3>当前座位视图</h3>
+                        <div id="seatGrid" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 15px;"></div>
+                    </div>
+                    <div class="card" style="margin-top:20px;">
+                        <h3>调整痕迹记录</h3>
+                        <textarea id="seatHistory" class="form-control" placeholder="在此手动记录座位调换日志..." onchange="saveData('seatHistory', this.value)"></textarea>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <div class="border-t pt-4">
-            <h2 class="text-xl font-semibold mb-2">快速备忘录</h2>
-            <textarea class="w-full p-3 border rounded-lg" rows="4" placeholder="在此输入日常备忘..."></textarea>
+        <!-- 2. 平时分模块（花样算盘） -->
+        <div id="page-scores" class="module-page">
+            <div class="page-header">
+                <h2 class="page-title">平时分（算盘计分）</h2>
+                <button class="btn" onclick="settleScores()">周算盘自动结算</button>
+            </div>
+            <div class="card" style="margin-bottom:15px;">
+                <div style="display:flex; gap:10px;">
+                    <input type="text" id="scoreStudent" placeholder="学生姓名" class="form-control">
+                    <input type="number" id="scoreAdd" placeholder="分数 (+/-)" class="form-control">
+                    <input type="text" id="scoreReason" placeholder="事由 (如: 表现积极)" class="form-control">
+                    <button class="btn" onclick="addScoreRecord()">记一笔</button>
+                </div>
+            </div>
+            <table>
+                <thead><tr><th>姓名</th><th>本周当前得分</th><th>历史得分记录</th><th>操作</th></tr></thead>
+                <tbody id="scoreTable"></tbody>
+            </table>
         </div>
+
+        <!-- 3. 家访记录表 -->
+        <div id="page-homevisit" class="module-page">
+            <div class="page-header"><h2 class="page-title">家访记录表</h2></div>
+            <div class="card" style="margin-bottom:20px;">
+                <div class="form-group"><label>孩子名字</label><input type="text" id="hvName" class="form-control"></div>
+                <div class="form-group"><label>家长</label><input type="text" id="hvParent" class="form-control"></div>
+                <div class="form-group"><label>家访主题</label><input type="text" id="hvTopic" class="form-control"></div>
+                <div class="form-group"><label>家长反馈</label><textarea id="hvFeedback" class="form-control"></textarea></div>
+                <div class="form-group"><label>总结</label><textarea id="hvSummary" class="form-control"></textarea></div>
+                <button class="btn" onclick="addHomeVisit()">保存记录</button>
+            </div>
+            <table>
+                <thead><tr><th>孩子名字</th><th>家长</th><th>家访主题</th><th>家长反馈</th><th>总结</th><th>操作</th></tr></thead>
+                <tbody id="hvTable"></tbody>
+            </table>
+        </div>
+
+        <!-- 4. 生日提醒与贺卡 -->
+        <div id="page-birthday" class="module-page">
+            <div class="page-header"><h2 class="page-title">孩子生日提醒</h2></div>
+            <div class="card-grid">
+                <div class="card">
+                    <h3>录入生日</h3>
+                    <div class="form-group"><label>学生姓名</label><input type="text" id="bName" class="form-control"></div>
+                    <div class="form-group"><label>生日 (MM-DD)</label><input type="text" id="bDate" placeholder="如: 05-20" class="form-control"></div>
+                    <button class="btn" onclick="addBirthday()">添加记录</button>
+                </div>
+                <div class="card" style="grid-column: span 2;">
+                    <h3>生日贺卡简易模板 generator</h3>
+                    <div class="form-group">
+                        <select id="bCardSelect" class="form-control" onchange="generateCard()"><option value="">选择学生...</option></select>
+                    </div>
+                    <textarea id="bCardResult" class="form-control" readonly rows="4"></textarea>
+                    <button class="btn" style="margin-top:10px;" onclick="copyText('bCardResult')">复制贺卡文案</button>
+                </div>
+            </div>
+            <table>
+                <thead><tr><th>姓名</th><th>生日</th><th>操作</th></tr></thead>
+                <tbody id="bTable"></tbody>
+            </table>
+        </div>
+
+        <!-- 5. 班级管理员名单 -->
+        <div id="page-cadres" class="module-page">
+            <div class="page-header"><h2 class="page-title">班级管理员名单</h2></div>
+            <div class="card" style="margin-bottom:15px;">
+                <div style="display:flex; gap:10px;">
+                    <input type="text" id="cadreRole" placeholder="岗位 (如: 卫生委员)" class="form-control">
+                    <input type="text" id="cadreName" placeholder="学生姓名" class="form-control">
+                    <button class="btn" onclick="addCadre()">新增岗位</button>
+                </div>
+            </div>
+            <table>
+                <thead><tr><th>岗位名称</th><th>对应学生</th><th>操作</th></tr></thead>
+                <tbody id="cadreTable"></tbody>
+            </table>
+        </div>
+
+        <!-- 6. 值日生流动表 -->
+        <div id="page-duty" class="module-page">
+            <div class="page-header"><h2 class="page-title">值日生流动表</h2></div>
+            <table>
+                <thead><tr><th>星期</th><th>值日人员/区域安排</th></tr></thead>
+                <tbody id="dutyTable">
+                    <tr><td>星期一</td><td><input type="text" class="form-control" id="duty-1" onchange="saveDuty()"></td></tr>
+                    <tr><td>星期二</td><td><input type="text" class="form-control" id="duty-2" onchange="saveDuty()"></td></tr>
+                    <tr><td>星期三</td><td><input type="text" class="form-control" id="duty-3" onchange="saveDuty()"></td></tr>
+                    <tr><td>星期四</td><td><input type="text" class="form-control" id="duty-4" onchange="saveDuty()"></td></tr>
+                    <tr><td>星期五</td><td><input type="text" class="form-control" id="duty-5" onchange="saveDuty()"></td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 7. 家长信息登记表 -->
+        <div id="page-parents" class="module-page">
+            <div class="page-header"><h2 class="page-title">家长信息登记表</h2></div>
+            <div class="card" style="margin-bottom:15px;">
+                <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:10px;">
+                    <input type="text" id="pParent" placeholder="XXX家长" class="form-control">
+                    <input type="text" id="pPhone" placeholder="联系电话" class="form-control">
+                    <input type="text" id="pAddress" placeholder="住址" class="form-control">
+                    <input type="text" id="pEdu" placeholder="学历" class="form-control">
+                    <input type="text" id="pJob" placeholder="工作性质" class="form-control">
+                    <input type="text" id="pHope" placeholder="对孩子的希望" class="form-control">
+                </div>
+                <button class="btn" style="margin-top:10px;" onclick="addParent()">保存信息</button>
+            </div>
+            <div style="overflow-x:auto;">
+                <table>
+                    <thead><tr><th>家长</th><th>电话</th><th>住址</th><th>学历</th><th>工作性质</th><th>对孩子的希望</th><th>操作</th></tr></thead>
+                    <tbody id="parentTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 8. 课程表页面 -->
+        <div id="page-schedule" class="module-page">
+            <div class="page-header"><h2 class="page-title"> weekly 课程表</h2></div>
+            <table>
+                <thead><tr><th>节次</th><th>周一</th><th>周二</th><th>周三</th><th>周四</th><th>周五</th></tr></thead>
+                <tbody id="scheduleTable"></tbody>
+            </table>
+        </div>
+
+        <!-- 9. 校园活动安排事项 -->
+        <div id="page-activities" class="module-page">
+            <div class="page-header"><h2 class="page-title">校园活动安排</h2></div>
+            <div class="card" style="margin-bottom:15px;">
+                <div style="display:flex; gap:10px;">
+                    <input type="text" id="actName" placeholder="活动名称" class="form-control">
+                    <input type="date" id="actTime" class="form-control">
+                    <input type="text" id="actTodo" placeholder="待办事项" class="form-control">
+                    <button class="btn" onclick="addActivity()">添加活动</button>
+                </div>
+            </div>
+            <table>
+                <thead><tr><th>活动</th><th>时间</th><th>待办事项</th><th>状态</th><th>操作</th></tr></thead>
+                <tbody id="actTable"></tbody>
+            </table>
+        </div>
+
+        <!-- 10. 家长沟通记录表 -->
+        <div id="page-comm" class="module-page">
+            <div class="page-header"><h2 class="page-title">家长沟通记录表</h2></div>
+            <div class="card" style="margin-bottom:15px;">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                    <input type="datetime-local" id="cTime" class="form-control">
+                    <input type="text" id="cStudent" placeholder="学生名字" class="form-control">
+                    <textarea id="cContent" placeholder="沟通内容" class="form-control"></textarea>
+                    <textarea id="cResult" placeholder="沟通结果" class="form-control"></textarea>
+                </div>
+                <button class="btn" style="margin-top:10px;" onclick="addComm()">增加沟通记录</button>
+            </div>
+            <table>
+                <thead><tr><th>时间</th><th>学生</th><th>沟通内容</th><th>沟通结果</th><th>操作</th></tr></thead>
+                <tbody id="commTable"></tbody>
+            </table>
+        </div>
+
+        <!-- 12. 学生档案观察记录表 -->
+        <div id="page-observation" class="module-page">
+            <div class="page-header"><h2 class="page-title">学生档案观察记录</h2></div>
+            <div class="card" style="margin-bottom:15px;">
+                <div style="display:flex; gap:10px;">
+                    <input type="text" id="obsName" placeholder="学生姓名" class="form-control">
+                    <input type="text" id="obsAdv" placeholder="优点" class="form-control">
+                    <input type="text" id="obsDis" placeholder="需要改进" class="form-control">
+                    <button class="btn" onclick="addObs()">记录</button>
+                </div>
+            </div>
+            <table>
+                <thead><tr><th>姓名</th><th>优点</th><th>缺点/改进</th><th>操作</th></tr></thead>
+                <tbody id="obsTable"></tbody>
+            </table>
+        </div>
+
+        <!-- 13. 学期课程进度 -->
+        <div id="page-progress" class="module-page">
+            <div class="page-header"><h2 class="page-title">学期课程进度</h2></div>
+            <div class="card" style="margin-bottom:20px;">
+                <h3>总体进度评估</h3>
+                <div class="progress-bar" style="margin:10px 0;">
+                    <div class="progress-fill" id="progBar" style="width: 0%;"></div>
+                </div>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <span>完成百分比: </span>
+                    <input type="number" id="progRate" min="0" max="100" style="width:80px" class="form-control" onchange="updateProgRate(this.value)"> %
+                </div>
+            </div>
+            <div class="card">
+                <h3>进度记录本</h3>
+                <div style="display:flex; gap:10px; margin-bottom:10px;">
+                    <input type="text" id="progChapter" placeholder="章节内容" class="form-control">
+                    <select id="progStatus" class="form-control"><option value="已完成">已完成</option><option value="进行中">进行中</option></select>
+                    <button class="btn" onclick="addProgLog()">登记日志</button>
+                </div>
+                <table>
+                    <thead><tr><th>章节</th><th>状态</th><th>记录时间</th></tr></thead>
+                    <tbody id="progTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 14. 学生日常小故事与分享文案 -->
+        <div id="page-stories" class="module-page">
+            <div class="page-header"><h2 class="page-title">日常小故事与群分享</h2></div>
+            <div class="card" style="margin-bottom:15px;">
+                <div class="form-group"><label>学生/主题</label><input type="text" id="stTitle" class="form-control"></div>
+                <div class="form-group"><label>故事纪实</label><textarea id="stBody" class="form-control"></textarea></div>
+                <button class="btn" onclick="addStory()">保存故事</button>
+            </div>
+            <div class="card-grid" id="storyGrid"></div>
+        </div>
+
+        <!-- 15. 图书保管表格 -->
+        <div id="page-books" class="module-page">
+            <div class="page-header"><h2 class="page-title">班级图书保管</h2></div>
+            <div class="card" style="margin-bottom:15px;">
+                <div style="display:flex; gap:10px;">
+                    <input type="text" id="bkTitle" placeholder="图书名称" class="form-control">
+                    <input type="text" id="bkStudent" placeholder="借阅学生" class="form-control">
+                    <input type="date" id="bkOut" class="form-control">
+                    <button class="btn" onclick="addBook()">借出登记</button>
+                </div>
+            </div>
+            <table>
+                <thead><tr><th>图书名称</th><th>借阅学生</th><th>借出时间</th><th>归还时间</th><th>操作</th></tr></thead>
+                <tbody id="bookTable"></tbody>
+            </table>
+        </div>
+
+        <!-- 16. 读背表格 -->
+        <div id="page-recite" class="module-page">
+            <div class="page-header"><h2 class="page-title">各科读背任务记录</h2></div>
+            <div class="card" style="margin-bottom:15px;">
+                <div style="display:flex; gap:10px;">
+                    <input type="text" id="rcStudent" placeholder="学生姓名" class="form-control">
+                    <input type="text" id="rcTask" placeholder="背诵任务 (如: 篇目1)" class="form-control">
+                    <button class="btn" onclick="addRecite()">新增登记</button>
+                </div>
+            </div>
+            <table>
+                <thead><tr><th>学生姓名</th><th>背诵任务</th><th>状态</th><th>操作</th></tr></thead>
+                <tbody id="reciteTable"></tbody>
+            </table>
+        </div>
+
+        <!-- 17. 每日作业打卡表 -->
+        <div id="page-homework" class="module-page">
+            <div class="page-header"><h2 class="page-title">每日作业打卡</h2></div>
+            <div class="card" style="margin-bottom:15px;">
+                <div style="display:flex; gap:10px;">
+                    <input type="date" id="hwDate" class="form-control">
+                    <input type="text" id="hwStudent" placeholder="学生姓名" class="form-control">
+                    <input type="text" id="hwTask" placeholder="作业内容" class="form-control">
+                    <button class="btn" onclick="addHomework()">新增打卡项</button>
+                </div>
+            </div>
+            <table>
+                <thead><tr><th>日期</th><th>学生</th><th>作业内容</th><th>打卡标记</th><th>操作</th></tr></thead>
+                <tbody id="hwTable"></tbody>
+            </table>
+        </div>
+
     </div>
+
+    <script>
+        // --- 模块配置清单 ---
+        const modules = [
+            { id: 'dashboard', name: '🏠 首页面板' },
+            { id: 'seating', name: '🪑 座位调节' },
+            { id: 'scores', name: '🧮 平时分(算盘)' },
+            { id: 'homevisit', name: '🚪 家访记录表' },
+            { id: 'birthday', name: '🎂 生日提醒贺卡' },
+            { id: 'cadres', name: '👑 班级管理员' },
+            { id: 'duty', name: '🧹 值日生流动表' },
+            { id: 'parents', name: '📞 家长信息登记' },
+            { id: 'schedule', name: '📅 课程表管理' },
+            { id: 'activities', name: '🎈 校园活动安排' },
+            { id: 'comm', name: '💬 家长沟通记录' },
+            { id: 'observation', name: '👁️ 学生观察记录' },
+            { id: 'progress', name: '📈 学期课程进度' },
+            { id: 'stories', name: '📖 日常故事分享' },
+            { id: 'books', name: '📚 图书保管登记' },
+            { id: 'recite', name: '🗣️ 读背任务打卡' },
+            { id: 'homework', name: '✏️ 每日作业打卡' }
+        ];
+
+        // --- 全局数据加载与保存函数 ---
+        function getData(key, defaultVal = []) {
+            const data = localStorage.getItem('teacher_db_' + key);
+            return data ? JSON.parse(data) : defaultVal;
+        }
+
+        function saveData(key, val) {
+            localStorage.setItem('teacher_db_' + key, JSON.stringify(val));
+        }
+
+        // --- 初始化UI与路由系统 ---
+        function initApp() {
+            const navContainer = document.getElementById('navList');
+            const quickNav = document.getElementById('quickNav');
+
+            modules.forEach(m => {
+                // 渲染侧边栏
+                const btn = document.createElement('button');
+                btn.className = `nav-item ${m.id === 'dashboard' ? 'active' : ''}`;
+                btn.innerText = m.name;
+                btn.onclick = () => switchPage(m.id);
+                btn.id = `nav-${m.id}`;
+                navContainer.appendChild(btn);
+
+                // 渲染首页快捷卡片
+                if(m.id !== 'dashboard') {
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    card.style.cursor = 'pointer';
+                    card.innerHTML = `<h3>${m.name}</h3><p style="font-size:12px; color:#666">点击进入管理</p>`;
+                    card.onclick = () => switchPage(m.id);
+                    quickNav.appendChild(card);
+                }
+            });
+
+            // 初始化各业务模块
+            initHolidays();
+            renderSeats();
+            renderScores();
+            renderHomeVisits();
+            renderBirthdays();
+            renderCadres();
+            renderDuty();
+            renderParents();
+            renderSchedule();
+            renderActivities();
+            renderComm();
+            renderObs();
+            renderProgress();
+            renderStories();
+            renderBooks();
+            renderRecite();
+            renderHomework();
+        }
+
+        function switchPage(id) {
+            document.querySelectorAll('.module-page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            
+            document.getElementById(`page-${id}`).classList.add('active');
+            document.getElementById(`nav-${id}`).classList.add('active');
+        }
+
+        // --- 11. 节假日倒计时 ---
+        function initHolidays() {
+            const holidays = [
+                { name: '中秋节', date: '2026-09-25' },
+                { name: '国庆节', date: '2026-10-01' },
+                { name: '元旦', date: '2027-01-01' }
+            ];
+            const container = document.getElementById('holidayWidget');
+            const now = new Date();
+
+            holidays.forEach(h => {
+                const hDate = new Date(h.date);
+                const diffDays = Math.ceil((hDate - now) / (1000 * 60 * 60 * 24));
+                const box = document.createElement('div');
+                box.style.cssText = "background:var(--primary-light); padding:10px 15px; border-radius:6px; text-align:center;";
+                box.innerHTML = `<div style="font-size:12px;">${h.name}</div><div style="font-size:20px; font-weight:bold; color:var(--primary);">${diffDays > 0 ? diffDays + ' 天' : '已过'}</div>`;
+                container.appendChild(box);
+            });
+        }
+
+        // --- 1. 座位调节模块 ---
+        function renderSeats() {
+            const seats = getData('seats', {});
+            const grid = document.getElementById('seatGrid');
+            grid.innerHTML = '';
+            for(let r=1; r<=6; r++) {
+                for(let c=1; c<=6; c++) {
+                    const key = `${r}-${c}`;
+                    const name = seats[key] || '空';
+                    const div = document.createElement('div');
+                    div.style.cssText = "border:1px dashed var(--border); padding:10px; text-align:center; border-radius:4px; font-size:12px; background:#fff;";
+                    div.innerHTML = `<span style="color:#aaa;">${r}排${c}列</span><br><b>${name}</b>`;
+                    grid.appendChild(div);
+                }
+            }
+            document.getElementById('seatHistory').value = getData('seatHistory', '');
+        }
+        function saveSeat() {
+            const name = document.getElementById('seatStudent').value;
+            const r = document.getElementById('seatRow').value;
+            const c = document.getElementById('seatCol').value;
+            if(!name || !r || !c) return alert('请完整填写');
+            const seats = getData('seats', {});
+            seats[`${r}-${c}`] = name;
+            saveData('seats', seats);
+            renderSeats();
+        }
+
+        // --- 2. 平时分模块（花样算盘）---
+        function renderScores() {
+            const list = getData('scores', []);
+            const tbody = document.getElementById('scoreTable');
+            tbody.innerHTML = list.map((item, idx) => `
+                <tr>
+                    <td>${item.name}</td>
+                    <td><b style="color:var(--primary); font-size:16px;">${item.currentScore}</b> 分</td>
+                    <td>${(item.history || []).join('<br>')}</td>
+                    <td><button class="btn btn-danger btn-sm" onclick="delData('scores', ${idx}, renderScores)">删除</button></td>
+                </tr>
+            `).join('');
+        }
+        function addScoreRecord() {
+            const name = document.getElementById('scoreStudent').value;
+            const add = parseInt(document.getElementById('scoreAdd').value);
+            const reason = document.getElementById('scoreReason').value;
+            if(!name || isNaN(add)) return alert('请输入有效名字和分数');
+
+            let list = getData('scores', []);
+            let target = list.find(s => s.name === name);
+            if(!target) {
+                target = { name, currentScore: 0, history: [] };
+                list.push(target);
+            }
+            target.currentScore += add;
+            target.history.push(`${new Date().toLocaleDateString()}: ${add > 0 ? '+'+add : add} (${reason})`);
+            saveData('scores', list);
+            renderScores();
+        }
+        function settleScores() {
+            let list = getData('scores', []);
+            list.forEach(s => {
+                s.history.push(`--- 周结算留存: ${s.currentScore} 分 ---`);
+            });
+            saveData('scores', list);
+            renderScores();
+            alert('本周平时分结算成功，历史痕迹已保留！');
+        }
+
+        // --- 3. 家访记录表 ---
+        function renderHomeVisits() {
+            const list = getData('homevisits', []);
+            document.getElementById('hvTable').innerHTML = list.map((item, idx) => `
+                <tr>
+                    <td>${item.name}</td><td>${item.parent}</td><td>${item.topic}</td>
+                    <td>${item.feedback}</td><td>${item.summary}</td>
+                    <td><button class="btn btn-danger btn-sm" onclick="delData('homevisits', ${idx}, renderHomeVisits)">删除</button></td>
+                </tr>
+            `).join('');
+        }
+        function addHomeVisit() {
+            const name = document.getElementById('hvName').value;
+            if(!name) return;
+            const list = getData('homevisits', []);
+            list.push({
+                name, parent: document.getElementById('hvParent').value,
+                topic: document.getElementById('hvTopic').value,
+                feedback: document.getElementById('hvFeedback').value,
+                summary: document.getElementById('hvSummary').value
+            });
+            saveData('homevisits', list);
+            renderHomeVisits();
+        }
+
+        // --- 4. 孩子生日提醒与贺卡 ---
+        function renderBirthdays() {
+            const list = getData('birthdays', []);
+            document.getElementById('bTable').innerHTML = list.map((item, idx) => `
+                <tr>
+                    <td>${item.name}</td><td>${item.date}</td>
+                    <td><button class="btn btn-danger btn-sm" onclick="delData('birthdays', ${idx}, renderBirthdays)">删除</button></td>
+                </tr>
+            `).join('');
+            
+            const sel = document.getElementById('bCardSelect');
+            sel.innerHTML = '<option value="">选择学生生成贺卡...</option>' + list.map(b => `<option value="${b.name}">${b.name}</option>`).join('');
+        }
+        function addBirthday() {
+            const name = document.getElementById('bName').value;
+            const date = document.getElementById('bDate').value;
+            if(!name || !date) return;
+            const list = getData('birthdays', []);
+            list.push({ name, date });
+            saveData('birthdays', list);
+            renderBirthdays();
+        }
+        function generateCard() {
+            const name = document.getElementById('bCardSelect').value;
+            if(!name) return;
+            document.getElementById('bCardResult').value = `🌟【生日祝福】亲爱的${name}同学：\n祝你生日快乐！愿你在新的一岁里像小树一样茁壮成长，快乐学习，勇敢探索，每天都充满笑容！——你的班主任老师❤️`;
+        }
+
+        // --- 5. 班级管理员名单 ---
+        function renderCadres() {
+            const list = getData('cadres', []);
+            document.getElementById('cadreTable').innerHTML = list.map((item, idx) => `
+                <tr><td>${item.role}</td><td>${item.name}</td>
+                <td><button class="btn btn-danger btn-sm" onclick="delData('cadres', ${idx}, renderCadres)">删除</button></td></tr>
+            `).join('');
+        }
+        function addCadre() {
+            const role = document.getElementById('cadreRole').value;
+            const name = document.getElementById('cadreName').value;
+            if(!role || !name) return;
+            const list = getData('cadres', []);
+            list.push({ role, name });
+            saveData('cadres', list);
+            renderCadres();
+        }
+
+        // --- 6. 值日生流动表 ---
+        function renderDuty() {
+            const duty = getData('duty', {});
+            for(let i=1; i<=5; i++) {
+                if(duty[i]) document.getElementById(`duty-${i}`).value = duty[i];
+            }
+        }
+        function saveDuty() {
+            const duty = {};
+            for(let i=1; i<=5; i++) {
+                duty[i] = document.getElementById(`duty-${i}`).value;
+            }
+            saveData('duty', duty);
+        }
+
+        // --- 7. 家长信息登记表 ---
+        function renderParents() {
+            const list = getData('parents', []);
+            document.getElementById('parentTable').innerHTML = list.map((item, idx) => `
+                <tr>
+                    <td>${item.parent}</td><td>${item.phone}</td><td>${item.address}</td>
+                    <td>${item.edu}</td><td>${item.job}</td><td>${item.hope}</td>
+                    <td><button class="btn btn-danger btn-sm" onclick="delData('parents', ${idx}, renderParents)">删除</button></td>
+                </tr>
+            `).join('');
+        }
+        function addParent() {
+            const parent = document.getElementById('pParent').value;
+            if(!parent) return;
+            const list = getData('parents', []);
+            list.push({
+                parent, phone: document.getElementById('pPhone').value,
+                address: document.getElementById('pAddress').value,
+                edu: document.getElementById('pEdu').value,
+                job: document.getElementById('pJob').value,
+                hope: document.getElementById('pHope').value
+            });
+            saveData('parents', list);
+            renderParents();
+        }
+
+        // --- 8. 课程表页面 ---
+        function renderSchedule() {
+            const data = getData('schedule', {});
+            const tbody = document.getElementById('scheduleTable');
+            tbody.innerHTML = '';
+            for(let section=1; section<=6; section++) {
+                let tr = `<tr><td>第 ${section} 节</td>`;
+                for(let day=1; day<=5; day++) {
+                    const key = `${day}-${section}`;
+                    const val = data[key] || '';
+                    tr += `<td><input type="text" class="form-control" value="${val}" onchange="saveSchedule('${key}', this.value)"></td>`;
+                }
+                tr += '</tr>';
+                tbody.innerHTML += tr;
+            }
+        }
+        function saveSchedule(key, val) {
+            const data = getData('schedule', {});
+            data[key] = val;
+            saveData('schedule', data);
+        }
+
+        // --- 9. 校园活动安排 ---
+        function renderActivities() {
+            const list = getData('activities', []);
+            document.getElementById('actTable').innerHTML = list.map((item, idx) => `
+                <tr>
+                    <td>${item.name}</td><td>${item.time}</td><td>${item.todo}</td>
+                    <td><button class="btn btn-sm ${item.status === '完成'?'btn-secondary':''}" onclick="toggleActStatus(${idx})">${item.status}</button></td>
+                    <td><button class="btn btn-danger btn-sm" onclick="delData('activities', ${idx}, renderActivities)">删除</button></td>
+                </tr>
+            `).join('');
+        }
+        function addActivity() {
+            const name = document.getElementById('actName').value;
+            if(!name) return;
+            const list = getData('activities', []);
+            list.push({ name, time: document.getElementById('actTime').value, todo: document.getElementById('actTodo').value, status: '未完成' });
+            saveData('activities', list);
+            renderActivities();
+        }
+        function toggleActStatus(idx) {
+            const list = getData('activities', []);
+            list[idx].status = list[idx].status === '未完成' ? '完成' : '未完成';
+            saveData('activities', list);
+            renderActivities();
+        }
+
+        // --- 10. 家长沟通记录表 ---
+        function renderComm() {
+            const list = getData('comm', []);
+            document.getElementById('commTable').innerHTML = list.map((item, idx) => `
+                <tr>
+                    <td>${item.time}</td><td>${item.student}</td><td>${item.content}</td><td>${item.result}</td>
+                    <td><button class="btn btn-danger btn-sm" onclick="delData('comm', ${idx}, renderComm)">删除</button></td>
+                </tr>
+            `).join('');
+        }
+        function addComm() {
+            const student = document.getElementById('cStudent').value;
+            if(!student) return;
+            const list = getData('comm', []);
+            list.push({
+                time: document.getElementById('cTime').value, student,
+                content: document.getElementById('cContent').value,
+                result: document.getElementById('cResult').value
+            });
+            saveData('comm', list);
+            renderComm();
+        }
+
+        // --- 12. 学生档案观察记录 ---
+        function renderObs() {
+            const list = getData('obs', []);
+            document.getElementById('obsTable').innerHTML = list.map((item, idx) => `
+                <tr>
+                    <td>${item.name}</td><td>${item.adv}</td><td>${item.dis}</td>
+                    <td><button class="btn btn-danger btn-sm" onclick="delData('obs', ${idx}, renderObs)">删除</button></td>
+                </tr>
+            `).join('');
+        }
+        function addObs() {
+            const name = document.getElementById('obsName').value;
+            if(!name) return;
+            const list = getData('obs', []);
+            list.push({ name, adv: document.getElementById('obsAdv').value, dis: document.getElementById('obsDis').value });
+            saveData('obs', list);
+            renderObs();
+        }
+
+        // --- 13. 学期课程进度 ---
+        function renderProgress() {
+            const rate = getData('progRate', 0);
+            document.getElementById('progRate').value = rate;
+            document.getElementById('progBar').style.width = rate + '%';
+
+            const list = getData('progLogs', []);
+            document.getElementById('progTable').innerHTML = list.map(item => `
+                <tr><td>${item.chapter}</td><td>${item.status}</td><td>${item.time}</td></tr>
+            `).join('');
+        }
+        function updateProgRate(val) {
+            saveData('progRate', val);
+            document.getElementById('progBar').style.width = val + '%';
+        }
+        function addProgLog() {
+            const chapter = document.getElementById('progChapter').value;
+            if(!chapter) return;
+            const list = getData('progLogs', []);
+            list.unshift({ chapter, status: document.getElementById('progStatus').value, time: new Date().toLocaleString() });
+            saveData('progLogs', list);
+            renderProgress();
+        }
+
+        // --- 14. 学生日常小故事 ---
+        function renderStories() {
+            const list = getData('stories', []);
+            const grid = document.getElementById('storyGrid');
+            grid.innerHTML = list.map((item, idx) => `
+                <div class="card">
+                    <h3>${item.title}</h3>
+                    <p style="font-size:13px; color:#444; margin:10px 0;">${item.body}</p>
+                    <div style="background:#F1F5F9; padding:8px; font-size:12px; border-radius:4px;" id="storyText-${idx}">
+[班级故事分享] 亲爱的家长们：今天班里发生了一件温馨的小事，关于 ${item.title}：${item.body}。为我们的孩子点赞！
+                    </div>
+                    <button class="btn btn-sm" style="margin-top:10px;" onclick="copyText('storyText-${idx}')">复制群分享文案</button>
+                    <button class="btn btn-danger btn-sm" style="margin-top:10px;" onclick="delData('stories', ${idx}, renderStories)">删除</button>
+                </div>
+            `).join('');
+        }
+        function addStory() {
+            const title = document.getElementById('stTitle').value;
+            const body = document.getElementById('stBody').value;
+            if(!title || !body) return;
+            const list = getData('stories', []);
+            list.push({ title, body });
+            saveData('stories', list);
+            renderStories();
+        }
+
+        // --- 15. 图书保管表格 ---
+        function renderBooks() {
+            const list = getData('books', []);
+            document.getElementById('bookTable').innerHTML = list.map((item, idx) => `
+                <tr>
+                    <td>${item.title}</td><td>${item.student}</td><td>${item.out}</td>
+                    <td>${item.back ? item.back : `<button class="btn btn-sm" onclick="returnBook(${idx})">标记归还</button>`}</td>
+                    <td><button class="btn btn-danger btn-sm" onclick="delData('books', ${idx}, renderBooks)">删除</button></td>
+                </tr>
+            `).join('');
+        }
+        function addBook() {
+            const title = document.getElementById('bkTitle').value;
+            if(!title) return;
+            const list = getData('books', []);
+            list.push({ title, student: document.getElementById('bkStudent').value, out: document.getElementById('bkOut').value, back: '' });
+            saveData('books', list);
+            renderBooks();
+        }
+        function returnBook(idx) {
+            const list = getData('books', []);
+            list[idx].back = new Date().toLocaleDateString();
+            saveData('books', list);
+            renderBooks();
+        }
+
+        // --- 16. 读背表格 ---
+        function renderRecite() {
+            const list = getData('recite', []);
+            document.getElementById('reciteTable').innerHTML = list.map((item, idx) => `
+                <tr>
+                    <td>${item.student}</td><td>${item.task}</td>
+                    <td><input type="checkbox" ${item.done ? 'checked' : ''} onchange="toggleRecite(${idx})"> ${item.done ? '已完成' : '未完成'}</td>
+                    <td><button class="btn btn-danger btn-sm" onclick="delData('recite', ${idx}, renderRecite)">删除</button></td>
+                </tr>
+            `).join('');
+        }
+        function addRecite() {
+            const student = document.getElementById('rcStudent').value;
+            if(!student) return;
+            const list = getData('recite', []);
+            list.push({ student, task: document.getElementById('rcTask').value, done: false });
+            saveData('recite', list);
+            renderRecite();
+        }
+        function toggleRecite(idx) {
+            const list = getData('recite', []);
+            list[idx].done = !list[idx].done;
+            saveData('recite', list);
+            renderRecite();
+        }
+
+        // --- 17. 每日作业打卡表 ---
+        function renderHomework() {
+            const list = getData('homework', []);
+            document.getElementById('hwTable').innerHTML = list.map((item, idx) => `
+                <tr>
+                    <td>${item.date}</td><td>${item.student}</td><td>${item.task}</td>
+                    <td><input type="checkbox" ${item.done ? 'checked' : ''} onchange="toggleHw(${idx})"> ${item.done ? '已打卡' : '未完成'}</td>
+                    <td><button class="btn btn-danger btn-sm" onclick="delData('homework', ${idx}, renderHomework)">删除</button></td>
+                </tr>
+            `).join('');
+        }
+        function addHomework() {
+            const student = document.getElementById('hwStudent').value;
+            if(!student) return;
+            const list = getData('homework', []);
+            list.push({ date: document.getElementById('hwDate').value, student, task: document.getElementById('hwTask').value, done: false });
+            saveData('homework', list);
+            renderHomework();
+        }
+        function toggleHw(idx) {
+            const list = getData('homework', []);
+            list[idx].done = !list[idx].done;
+            saveData('homework', list);
+            renderHomework();
+        }
+
+        // --- 通用帮助工具函数 ---
+        function delData(key, idx, renderFn) {
+            if(!confirm('确定要删除这条记录吗？')) return;
+            const list = getData(key, []);
+            list.splice(idx, 1);
+            saveData(key, list);
+            renderFn();
+        }
+
+        function copyText(elementId) {
+            const el = document.getElementById(elementId);
+            const text = el.value || el.innerText;
+            navigator.clipboard.writeText(text).then(() => alert('已复制到剪贴板！'));
+        }
+
+        function exportAllData() {
+            const allData = {};
+            for(let i=0; i<localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if(k.startsWith('teacher_db_')) {
+                    allData[k] = localStorage.getItem(k);
+                }
+            }
+            const blob = new Blob([JSON.stringify(allData)], {type: "application/json"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `教师工作台数据备份_${new Date().toLocaleDateString()}.json`;
+            a.click();
+        }
+
+        function importAllData(e) {
+            const file = e.target.files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                try {
+                    const data = JSON.parse(evt.target.result);
+                    Object.keys(data).forEach(k => {
+                        localStorage.setItem(k, data[k]);
+                    });
+                    alert('导入数据成功，页面即刻刷新！');
+                    location.reload();
+                } catch(err) {
+                    alert('导入文件格式不正确');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // 启动应用
+        window.onload = initApp;
+    </script>
 </body>
 </html>
