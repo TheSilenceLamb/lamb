@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>教师工作台</title>
+    <!-- 引入 Tailwind CSS 方便快速搞定好看的 UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 min-h-screen p-6">
+    <div class="max-w-4xl mx-auto bg-white p-8 rounded-xl shadow-md">
+        <h1 class="text-3xl font-bold text-slate-800 mb-4">🍎 教师工作台</h1>
+        <p class="text-slate-600 mb-6">欢迎使用！这里是你的专属工作空间。</p>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="p-4 bg-blue-50 rounded-lg border border-blue-100">
+                <h3 class="font-bold text-blue-800">今天课程</h3>
+                <p class="text-2xl font-bold text-blue-600 mt-2">4 节</p>
+            </div>
+            <div class="p-4 bg-green-50 rounded-lg border border-green-100">
+                <h3 class="font-bold text-green-800">待批改作业</h3>
+                <p class="text-2xl font-bold text-green-600 mt-2">12 份</p>
+            </div>
+            <div class="p-4 bg-purple-50 rounded-lg border border-purple-100">
+                <h3 class="font-bold text-purple-800">重要通知</h3>
+                <p class="text-2xl font-bold text-purple-600 mt-2">2 条</p>
+            </div>
+        </div>
+
+        <div class="border-t pt-4">
+            <h2 class="text-xl font-semibold mb-2">快速备忘录</h2>
+            <textarea class="w-full p-3 border rounded-lg" rows="4" placeholder="在此输入日常备忘..."></textarea>
+        </div>
+    </div>
+</body>
+</html>
