@@ -48,6 +48,19 @@
         th { background: var(--primary-light); color: var(--primary); font-weight: 600; }
         tr:hover { background: #F1F5F9; }
 
+        /* 课程表专用样式 */
+        #scheduleTableEl th, #scheduleTableEl td { padding: 14px 10px; text-align: center; vertical-align: middle; border-right: 1px solid var(--border); }
+        #scheduleTableEl th:last-child, #scheduleTableEl td:last-child { border-right: none; }
+        #scheduleTableEl th { font-size: 13px; }
+        #scheduleTableEl .period-cell { background: var(--primary-light); color: var(--primary); font-weight: 600; width: 60px; white-space: nowrap; }
+        #scheduleTableEl .lunch-row td { background: var(--bg); color: #B8860B; font-weight: 600; padding: 10px; font-size: 12px; border-top: 2px dashed var(--border); border-bottom: 2px dashed var(--border); }
+        #scheduleTableEl input { width: 100%; border: 1px solid transparent; background: transparent; text-align: center; padding: 8px 4px; font-size: 14px; border-radius: 4px; transition: 0.2s; }
+        #scheduleTableEl input:hover { border-color: var(--border); }
+        #scheduleTableEl input:focus { outline: none; border-color: var(--primary); background: white; }
+        #scheduleTableEl .today-col { background: #E3F2FD; }
+        .cal-nav { display: flex; align-items: center; gap: 10px; }
+        .cal-title { font-size: 15px; font-weight: 600; color: var(--primary); min-width: 180px; text-align: center; }
+
         .btn { padding: 8px 16px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; transition: 0.2s; }
         .btn:hover { opacity: 0.9; }
         .btn-secondary { background: #64748B; }
@@ -235,6 +248,15 @@
             </div>
         </div>
 
+        <!-- 清空课表弹窗 -->
+        <div class="cal-modal-mask" id="clearScheduleModal">
+            <div class="cal-modal">
+                <h3 id="clearScheduleTitle">🗑 清空课程表</h3>
+                <div class="cal-modal-date" id="clearScheduleSubtitle" style="margin-bottom:16px;"></div>
+                <div class="cal-modal-actions" id="clearScheduleActions" style="justify-content:center;flex-wrap:wrap;"></div>
+            </div>
+        </div>
+
         <!-- 1. 座位调节模块 -->
         <div id="page-seating" class="module-page">
             <div class="page-header"><h2 class="page-title">座位调节与记录</h2></div>
@@ -376,9 +398,25 @@
 
         <!-- 8. 课程表页面 -->
         <div id="page-schedule" class="module-page">
-            <div class="page-header"><h2 class="page-title"> weekly 课程表</h2></div>
-            <table>
-                <thead><tr><th>节次</th><th>周一</th><th>周二</th><th>周三</th><th>周四</th><th>周五</th></tr></thead>
+            <div class="page-header">
+                <h2 class="page-title">📅 课程表管理</h2>
+                <div class="cal-nav">
+                    <button class="btn btn-sm" onclick="changeScheduleWeek(-1)">◀ 上周</button>
+                    <span class="cal-title" id="scheduleWeekTitle"></span>
+                    <button class="btn btn-sm" onclick="changeScheduleWeek(1)">下周 ▶</button>
+                    <button class="btn btn-sm btn-secondary" onclick="goScheduleThisWeek()">本周</button>
+                </div>
+            </div>
+            <div class="card" style="margin-bottom:15px;">
+                <p style="font-size:12px; color:#666; margin-bottom:8px;">从 Excel/WPS 复制课程表粘贴到下方文本框（按 Tab 分列、回车分行），点击"导入"即可填充。也可直接在表格中编辑。</p>
+                <div style="display:flex; gap:10px; align-items:flex-start;">
+                    <textarea id="scheduleImport" class="form-control" rows="3" placeholder="粘贴课程表数据，例如：&#10;语文	数学	英语	体育&#10;音乐	美术	科学	品德" style="flex:1; resize:vertical;"></textarea>
+                    <button class="btn" onclick="importSchedule()">导入</button>
+                    <button class="btn btn-secondary" onclick="clearSchedule()">清空课表</button>
+                </div>
+            </div>
+            <table id="scheduleTableEl">
+                <thead id="scheduleHead"></thead>
                 <tbody id="scheduleTable"></tbody>
             </table>
         </div>
@@ -1301,26 +1339,196 @@
         }
 
         // --- 8. 课程表页面 ---
+        const DAY_NAMES = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+        const PERIOD_LABELS = ['第1节', '第2节', '第3节', '第4节', '第5节', '第6节', '第7节', '第8节'];
+        let scheduleWeekOffset = 0; // 相对本周的周偏移
+
+        // 获取指定偏移周的周一日期（周一为一周开始）
+        function getWeekMonday(offset) {
+            const now = getBeijingTime();
+            const day = now.getDay(); // 0=周日, 1=周一...
+            const diffToMonday = (day === 0 ? -6 : 1 - day);
+            const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday + offset * 7);
+            return monday;
+        }
+
+        // 周标识：用周一日期 YYYY-MM-DD 作为该周的唯一 key
+        function getWeekKey(offset) {
+            const m = getWeekMonday(offset);
+            return `${m.getFullYear()}-${String(m.getMonth()+1).padStart(2,'0')}-${String(m.getDate()).padStart(2,'0')}`;
+        }
+
+        function formatDate(d) {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}.${m}.${day}`;
+        }
+
+        function changeScheduleWeek(delta) {
+            scheduleWeekOffset += delta;
+            renderSchedule();
+        }
+
+        function goScheduleThisWeek() {
+            scheduleWeekOffset = 0;
+            renderSchedule();
+        }
+
+        // 读取当前周的课表数据（按周隔离）
+        function getCurrentWeekSchedule() {
+            const all = getData('schedule', {});
+            const weekKey = getWeekKey(scheduleWeekOffset);
+            return all[weekKey] || {};
+        }
+
         function renderSchedule() {
-            const data = getData('schedule', {});
+            const weekData = getCurrentWeekSchedule();
+            const monday = getWeekMonday(scheduleWeekOffset);
+            const today = getBeijingTime();
+            today.setHours(0, 0, 0, 0);
+
+            // 表头：周一~周日 + 日期
+            const thead = document.getElementById('scheduleHead');
+            let headHtml = '<tr><th class="period-cell">节次</th>';
+            for (let d = 0; d < 7; d++) {
+                const date = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + d);
+                const isToday = date.getTime() === today.getTime();
+                headHtml += `<th class="${isToday ? 'today-col' : ''}">${DAY_NAMES[d]}<br><span style="font-size:11px;font-weight:normal;">${formatDate(date)}</span></th>`;
+            }
+            headHtml += '</tr>';
+            thead.innerHTML = headHtml;
+
+            // 周标题
+            const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6);
+            document.getElementById('scheduleWeekTitle').textContent =
+                `${formatDate(monday)} ~ ${formatDate(sunday)}`;
+
+            // 表体：8 节课，上午4节 + 午休 + 下午4节
             const tbody = document.getElementById('scheduleTable');
             tbody.innerHTML = '';
-            for(let section=1; section<=6; section++) {
-                let tr = `<tr><td>第 ${section} 节</td>`;
-                for(let day=1; day<=5; day++) {
+            for (let section = 1; section <= 8; section++) {
+                let tr = `<tr><td class="period-cell">${PERIOD_LABELS[section - 1]}</td>`;
+                for (let day = 1; day <= 7; day++) {
                     const key = `${day}-${section}`;
-                    const val = data[key] || '';
-                    tr += `<td><input type="text" class="form-control" value="${val}" onchange="saveSchedule('${key}', this.value)"></td>`;
+                    const val = (weekData[key] || '').replace(/"/g, '&quot;');
+                    const date = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + day - 1);
+                    const isToday = date.getTime() === today.getTime();
+                    tr += `<td class="${isToday ? 'today-col' : ''}"><input type="text" value="${val}" onchange="saveSchedule('${key}', this.value)"></td>`;
                 }
                 tr += '</tr>';
                 tbody.innerHTML += tr;
+
+                // 第4节后插入午休分隔行
+                if (section === 4) {
+                    tbody.innerHTML += `<tr class="lunch-row"><td colspan="8">☀ 午休 LUNCH BREAK ☀</td></tr>`;
+                }
             }
         }
+
         function saveSchedule(key, val) {
-            const data = getData('schedule', {});
-            data[key] = val;
-            saveData('schedule', data);
+            const all = getData('schedule', {});
+            const weekKey = getWeekKey(scheduleWeekOffset);
+            if (!all[weekKey]) all[weekKey] = {};
+            all[weekKey][key] = val;
+            saveData('schedule', all);
         }
+
+        // 从 Excel/WPS 粘贴的表格文本导入课程表（仅导入到当前展示周）
+        // 支持的列分隔符：Tab(Excel)、、、，、,、；、;、空格
+        function splitRow(row) {
+            // 优先按 Tab 拆分（保留 Excel 空单元格）
+            const tabParts = row.split('\t');
+            if (tabParts.length > 1) return tabParts.map(p => p.trim());
+            // 否则按多种分隔符拆分
+            return row.split(/[、，,；;\s]+/).map(p => p.trim()).filter(p => p !== '');
+        }
+
+        function importSchedule() {
+            const text = document.getElementById('scheduleImport').value.trim();
+            if (!text) { alert('请先粘贴课程表数据'); return; }
+            const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+            const rows = lines.map(splitRow);
+            const weekData = {};
+            // rows: 每行是一节课的7天课程（列顺序：周一~周日）
+            for (let s = 0; s < rows.length && s < 8; s++) {
+                for (let d = 0; d < rows[s].length && d < 7; d++) {
+                    const val = rows[s][d];
+                    if (val) weekData[`${d + 1}-${s + 1}`] = val;
+                }
+            }
+            const cellCount = Object.keys(weekData).length;
+            const weekRange = document.getElementById('scheduleWeekTitle').textContent;
+            if (!confirm(`检测到 ${rows.length} 行、共 ${cellCount} 节课。\n将导入到当前展示周（${weekRange}），是否覆盖该周课程表？`)) return;
+            const all = getData('schedule', {});
+            const weekKey = getWeekKey(scheduleWeekOffset);
+            all[weekKey] = weekData;
+            saveData('schedule', all);
+            document.getElementById('scheduleImport').value = '';
+            renderSchedule();
+            alert('导入成功！');
+        }
+
+        function clearSchedule() {
+            const weekRange = document.getElementById('scheduleWeekTitle').textContent;
+            const modal = document.getElementById('clearScheduleModal');
+            const title = document.getElementById('clearScheduleTitle');
+            const subtitle = document.getElementById('clearScheduleSubtitle');
+            const actions = document.getElementById('clearScheduleActions');
+
+            title.textContent = '🗑 清空课程表';
+            subtitle.textContent = '请选择清空范围：';
+            actions.innerHTML = `
+                <button class="btn btn-secondary" onclick="closeClearSchedule()">取消</button>
+                <button class="btn btn-secondary" onclick="confirmClearSchedule('week')">清空当前周</button>
+                <button class="btn" onclick="confirmClearSchedule('all')">清空全部周</button>
+            `;
+            // 保存当前周范围供确认步骤使用
+            modal.dataset.weekRange = weekRange;
+            modal.classList.add('show');
+        }
+
+        function closeClearSchedule() {
+            document.getElementById('clearScheduleModal').classList.remove('show');
+        }
+
+        // 第二步：确认要清空的范围
+        function confirmClearSchedule(scope) {
+            const modal = document.getElementById('clearScheduleModal');
+            const title = document.getElementById('clearScheduleTitle');
+            const subtitle = document.getElementById('clearScheduleSubtitle');
+            const actions = document.getElementById('clearScheduleActions');
+            const weekRange = modal.dataset.weekRange || document.getElementById('scheduleWeekTitle').textContent;
+
+            if (scope === 'week') {
+                title.textContent = '⚠️ 确认清空当前周';
+                subtitle.innerHTML = `将清空当前展示周（<b>${weekRange}</b>）的课程表，<br>其他周不受影响。此操作不可恢复。`;
+            } else {
+                title.textContent = '⚠️ 确认清空全部周';
+                subtitle.innerHTML = `将清空<b>所有周</b>的课程表数据。<br>此操作不可恢复！`;
+            }
+            actions.innerHTML = `
+                <button class="btn btn-secondary" onclick="closeClearSchedule()">取消</button>
+                <button class="btn" style="background:#E74C3C;" onclick="doClearSchedule('${scope}')">确认清空</button>
+            `;
+        }
+
+        // 执行清空
+        function doClearSchedule(scope) {
+            const all = getData('schedule', {});
+            if (scope === 'week') {
+                const weekKey = getWeekKey(scheduleWeekOffset);
+                delete all[weekKey];
+                saveData('schedule', all);
+            } else {
+                saveData('schedule', {});
+            }
+            renderSchedule();
+            closeClearSchedule();
+            alert(scope === 'week' ? '已清空当前周的课程表。' : '已清空所有周的课程表。');
+        }
+
+
 
         // --- 9. 校园活动安排 ---
         function renderActivities() {
