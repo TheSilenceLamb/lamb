@@ -156,6 +156,26 @@
         .cal-dot-holiday { background: #FB8C00; }
         .cal-dot-note { background: #8e44ad; }
 
+        /* 座位卡片样式 */
+        .seat-card {
+            border: 1px dashed var(--border); padding: 10px; text-align: center;
+            border-radius: 6px; font-size: 12px; background: #fff; cursor: pointer;
+            transition: all 0.15s; user-select: none; position: relative;
+        }
+        .seat-card:hover { border-color: var(--primary); background: var(--primary-light); }
+        .seat-card.selected {
+            border: 2px solid var(--danger); background: #FFF5F5;
+            box-shadow: 0 0 0 2px rgba(229,62,62,0.2);
+        }
+        .seat-card.selected::after {
+            content: '切换'; position: absolute; top: -8px; right: -4px;
+            background: var(--danger); color: #fff; font-size: 10px; padding: 1px 5px;
+            border-radius: 3px; font-weight: 600;
+        }
+        .seat-card .seat-pos { color: #aaa; font-size: 11px; }
+        .seat-card .seat-name { font-weight: bold; font-size: 14px; margin-top: 2px; word-break: break-all; }
+        .seat-card .seat-name.empty { color: #ccc; font-weight: normal; }
+
         /* 日期备注弹窗 */
         .cal-modal-mask {
             position: fixed; inset: 0; background: rgba(0,0,0,0.4);
@@ -279,10 +299,19 @@
                     <div class="form-group"><label>排（1-6）</label><input type="number" id="seatRow" class="form-control"></div>
                     <div class="form-group"><label>列（1-6）</label><input type="number" id="seatCol" class="form-control"></div>
                     <button class="btn" onclick="saveSeat()">更新位置</button>
+                    <hr style="margin:16px 0;border:none;border-top:1px solid var(--border);">
+                    <h3 style="font-size:14px;">批量导入学生</h3>
+                    <div class="form-group">
+                        <label>选择名单文件（Excel .xlsx/.xls，或 .txt/.csv，每行一个姓名）</label>
+                        <input type="file" id="seatFileInput" accept=".xlsx,.xls,.txt,.csv" style="font-size:12px;width:100%;">
+                    </div>
+                    <button class="btn btn-secondary" onclick="importSeatsFromFile()">导入名单</button>
+                    <button class="btn btn-secondary" onclick="clearAllSeats()" style="margin-top:8px;">清空所有座位</button>
                 </div>
                 <div style="flex:1;">
                     <div class="card">
                         <h3>当前座位视图</h3>
+                        <p style="font-size:12px;color:#888;margin:8px 0;">💡 点击两个座位卡片可交换学生，再次点击已选中的卡片可取消</p>
                         <div id="seatGrid" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 15px;"></div>
                     </div>
                     <div class="card" style="margin-top:20px;">
@@ -574,6 +603,9 @@
         </div>
 
     </div>
+
+    <!-- SheetJS：解析 Excel 文件 -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
     <script>
         // --- 模块配置清单 ---
@@ -1171,6 +1203,8 @@
         }
 
         // --- 1. 座位调节模块 ---
+        let selectedSeatKey = null; // 当前选中待交换的座位
+
         function renderSeats() {
             const seats = getData('seats', {});
             const grid = document.getElementById('seatGrid');
@@ -1178,15 +1212,53 @@
             for(let r=1; r<=6; r++) {
                 for(let c=1; c<=6; c++) {
                     const key = `${r}-${c}`;
-                    const name = seats[key] || '空';
+                    const name = seats[key] || '';
                     const div = document.createElement('div');
-                    div.style.cssText = "border:1px dashed var(--border); padding:10px; text-align:center; border-radius:4px; font-size:12px; background:#fff;";
-                    div.innerHTML = `<span style="color:#aaa;">${r}排${c}列</span><br><b>${name}</b>`;
+                    div.className = 'seat-card' + (selectedSeatKey === key ? ' selected' : '');
+                    div.innerHTML = `
+                        <div class="seat-pos">${r}排${c}列</div>
+                        <div class="seat-name ${name ? '' : 'empty'}">${name || '空'}</div>
+                    `;
+                    div.onclick = () => handleSeatClick(key);
                     grid.appendChild(div);
                 }
             }
             document.getElementById('seatHistory').value = getData('seatHistory', '');
         }
+
+        // 点击座位卡片：第一次选中，第二次交换
+        function handleSeatClick(key) {
+            if (selectedSeatKey === null) {
+                // 第一次点击：选中
+                selectedSeatKey = key;
+                renderSeats();
+                return;
+            }
+            if (selectedSeatKey === key) {
+                // 点击同一个：取消选中
+                selectedSeatKey = null;
+                renderSeats();
+                return;
+            }
+            // 第二次点击不同座位：交换
+            const seats = getData('seats', {});
+            const name1 = seats[selectedSeatKey] || '';
+            const name2 = seats[key] || '';
+            seats[key] = name1;
+            seats[selectedSeatKey] = name2;
+            saveData('seats', seats);
+            // 记录调换日志
+            if (name1 || name2) {
+                const history = getData('seatHistory', '');
+                const now = getBeijingTime();
+                const ts = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+                const logLine = `[${ts}] ${selectedSeatKey}(${name1 || '空'}) ↔ ${key}(${name2 || '空'})\n`;
+                saveData('seatHistory', logLine + history);
+            }
+            selectedSeatKey = null;
+            renderSeats();
+        }
+
         function saveSeat() {
             const name = document.getElementById('seatStudent').value;
             const r = document.getElementById('seatRow').value;
@@ -1195,6 +1267,116 @@
             const seats = getData('seats', {});
             seats[`${r}-${c}`] = name;
             saveData('seats', seats);
+            // 清空输入框
+            document.getElementById('seatStudent').value = '';
+            document.getElementById('seatRow').value = '';
+            document.getElementById('seatCol').value = '';
+            renderSeats();
+        }
+
+        // 从文件导入学生名单（支持 Excel / txt / csv，按行列顺序自动排座）
+        function importSeatsFromFile() {
+            const input = document.getElementById('seatFileInput');
+            if (!input.files || !input.files.length) {
+                alert('请先选择一个名单文件');
+                return;
+            }
+            const file = input.files[0];
+            const ext = file.name.split('.').pop().toLowerCase();
+            const isExcel = ['xlsx', 'xls'].includes(ext);
+
+            if (isExcel) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    let names = [];
+                    try {
+                        const data = e.target.result; // binary string
+                        const wb = XLSX.read(data, { type: 'binary' });
+                        // 尝试所有工作表，收集所有单元格
+                        const allRows = [];
+                        wb.SheetNames.forEach(sheetName => {
+                            const ws = wb.Sheets[sheetName];
+                            const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', blankrows: false });
+                            rows.forEach(r => allRows.push(r));
+                        });
+                        console.log('Excel 解析原始数据（所有工作表）:', allRows);
+                        // 拍平 + 拆分单元格内可能的分隔符，跳过表头关键字
+                        const headerKeywords = ['姓名', '名字', '学生', '学生姓名', 'name', '姓名/学号', '序号', '学号'];
+                        names = allRows.flat().flatMap(cell => {
+                            const s = String(cell || '').trim();
+                            if (!s) return [];
+                            if (headerKeywords.includes(s)) return [];
+                            return s.split(/[\r\n、，,；;\t]+/).map(x => x.trim()).filter(x => x !== '');
+                        });
+                        console.log('识别到姓名列表:', names);
+                    } catch (err) {
+                        console.error('Excel 解析失败:', err);
+                        alert('Excel 解析失败：' + err.message + '\n请尝试另存为 .csv 或 .txt 格式再导入。');
+                        return;
+                    }
+                    assignSeats(names);
+                    // 如果 Excel 解析为空，回退尝试文本读取
+                    if (names.length === 0) {
+                        try {
+                            const text = e.target.result;
+                            const fallbackNames = text.split(/[\r\n、，,；;\t]+/).map(s => s.trim()).filter(s => s !== '');
+                            console.log('回退文本解析姓名:', fallbackNames);
+                            if (fallbackNames.length > 0) {
+                                assignSeats(fallbackNames);
+                                return;
+                            }
+                        } catch (e2) { /* ignore */ }
+                    }
+                };
+                reader.onerror = function() {
+                    alert('文件读取失败，请重试。');
+                };
+                reader.readAsBinaryString(file);
+            } else {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const text = e.target.result;
+                    const names = text
+                        .split(/[\r\n、，,；;\t]+/)
+                        .map(s => s.trim())
+                        .filter(s => s !== '');
+                    console.log('文本识别姓名:', names);
+                    assignSeats(names);
+                };
+                reader.readAsText(file, 'UTF-8');
+            }
+        }
+
+        // 将姓名列表按行列顺序排座
+        function assignSeats(names) {
+            if (!names || names.length === 0) {
+                alert('未识别到学生姓名。\n请检查文件内容：Excel 中每个单元格应为一个学生姓名，或 txt/csv 中每行一个姓名。\n详细信息请查看浏览器控制台 (F12)。');
+                return;
+            }
+            if (!confirm(`识别到 ${names.length} 名学生，将按行列顺序（1排1列→6排6列）自动排座并覆盖现有座位，是否继续？`)) return;
+            const seats = {};
+            let idx = 0;
+            for (let r = 1; r <= 6 && idx < names.length; r++) {
+                for (let c = 1; c <= 6 && idx < names.length; c++) {
+                    seats[`${r}-${c}`] = names[idx];
+                    idx++;
+                }
+            }
+            saveData('seats', seats);
+            selectedSeatKey = null;
+            renderSeats();
+            document.getElementById('seatFileInput').value = '';
+            if (names.length > 36) {
+                alert(`导入完成！共 ${names.length} 名学生，座位只有 36 个，剩余 ${names.length - 36} 人未排座。`);
+            } else {
+                alert(`导入完成！共 ${names.length} 名学生已排座。`);
+            }
+        }
+
+        function clearAllSeats() {
+            if (!confirm('确定清空所有座位吗？此操作不可恢复！')) return;
+            saveData('seats', {});
+            selectedSeatKey = null;
             renderSeats();
         }
 
