@@ -130,18 +130,30 @@
         .cal-lunar { font-size: 11px; color: #999; line-height: 1.3; }
         .cal-festival { font-size: 11px; color: #d35400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
         .cal-note-text { font-size: 11px; color: #8e44ad; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; margin-top: 1px; }
-        .cal-cell.holiday { background: #E8F5E9; }
-        .cal-cell.holiday .cal-day-num { color: #2e7d32; }
-        .cal-cell.holiday .cal-festival { color: #1b5e20; font-weight: 600; }
+        .cal-cell.holiday { background: #FFF3E0; }
+        .cal-cell.holiday .cal-day-num { color: #E65100; }
+        .cal-cell.holiday .cal-festival { color: #BF360C; font-weight: 600; }
+        /* 节假日"休"字标记 */
+        .cal-cell.holiday::before {
+            content: '休'; position: absolute; top: 4px; right: 4px;
+            background: #FB8C00; color: #fff; font-size: 10px; line-height: 1;
+            padding: 2px 4px; border-radius: 3px; font-weight: 600;
+        }
+        /* 今天 + 节假日：保留今天的绿色主题背景和描边，仍显示"休"标记 */
+        .cal-cell.today.holiday { background: var(--primary-light); }
+        .cal-cell.today.holiday .cal-day-num { color: var(--primary); }
+        .cal-cell.today.holiday .cal-festival { color: #BF360C; }
         .cal-cell.has-note::after {
             content: ''; position: absolute; top: 6px; right: 6px;
             width: 7px; height: 7px; border-radius: 50%; background: #8e44ad;
         }
+        /* 节假日有备注时，备注圆点移到右下角，避免与"休"标记重叠 */
+        .cal-cell.holiday.has-note::after { top: auto; bottom: 6px; right: 6px; }
         .cal-cell.other-month.has-note::after { background: #d1c4e9; }
         .cal-legend { display: flex; gap: 20px; margin-top: 12px; font-size: 13px; color: #666; align-items: center; flex-wrap: wrap; }
         .cal-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
         .cal-dot-today { background: var(--primary); }
-        .cal-dot-holiday { background: #A5D6A7; }
+        .cal-dot-holiday { background: #FB8C00; }
         .cal-dot-note { background: #8e44ad; }
 
         /* 日期备注弹窗 */
