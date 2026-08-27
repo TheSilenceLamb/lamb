@@ -604,8 +604,12 @@
 
     </div>
 
-    <!-- SheetJS：解析 Excel 文件 -->
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- SheetJS：解析 Excel 文件（主 CDN + 备用 CDN） -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"
+            onerror="this.onerror=null;this.src='https://cdn.staticfile.org/xlsx/0.18.5/xlsx.full.min.js';"></script>
+    <!-- JSZip：手动解压 xlsx（SheetJS 失败时的备用方案） -->
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"
+            onerror="this.onerror=null;this.src='https://cdn.staticfile.org/jszip/3.10.1/jszip.min.js';"></script>
 
     <script>
         // --- 模块配置清单 ---
@@ -1061,7 +1065,7 @@
         let calNoteDate = null; // 当前正在编辑的日期
 
         function getCalNotes() { return getData('cal_notes', {}); }
-        function saveCalNotes(notes) { setData('cal_notes', notes); }
+        function saveCalNotes(notes) { saveData('cal_notes', notes); }
 
         function initCalendar() {
             const now = getBeijingTime();
@@ -1274,6 +1278,116 @@
             renderSeats();
         }
 
+        // 从二维数组提取姓名（跳过表头关键字，拆分单元格内分隔符）
+        function extractNames(allRows) {
+            const headerKeywords = ['姓名', '名字', '学生', '学生姓名', 'name', '姓名/学号', '序号', '学号', '编号', 'No', 'no'];
+            return allRows.flat().flatMap(cell => {
+                const s = String(cell == null ? '' : cell).trim();
+                if (!s) return [];
+                if (headerKeywords.includes(s)) return [];
+                return s.split(/[\r\n、，,；;\t|]+/).map(x => x.trim()).filter(x => x !== '');
+            });
+        }
+
+        // 手动解析 xlsx（用 JSZip 解压 + 原生 XML 解析，绕过 SheetJS 兼容性问题）
+        function parseXlsxManual(binary, dbg) {
+            return new Promise((resolve, reject) => {
+                if (typeof JSZip === 'undefined') {
+                    reject(new Error('JSZip 未加载'));
+                    return;
+                }
+                JSZip.loadAsync(binary).then(zip => {
+                    // 1. 读取共享字符串表
+                    const ssFile = zip.file('xl/sharedStrings.xml');
+                    const ssPromise = ssFile ? ssFile.async('string') : Promise.resolve('');
+                    return ssPromise.then(ssXml => {
+                        const sharedStrings = [];
+                        if (ssXml) {
+                            const parser = new DOMParser();
+                            const ssDoc = parser.parseFromString(ssXml, 'text/xml');
+                            const siElems = ssDoc.getElementsByTagName('si');
+                            for (let i = 0; i < siElems.length; i++) {
+                                const tElem = siElems[i].getElementsByTagName('t')[0];
+                                sharedStrings.push(tElem ? tElem.textContent : '');
+                            }
+                        }
+                        dbg('共享字符串表: ' + sharedStrings.length + ' 条');
+
+                        // 2. 读取所有工作表（sheet1.xml ~ sheet20.xml）
+                        const allRows = [];
+                        const promises = [];
+                        for (let i = 1; i <= 20; i++) {
+                            const f = zip.file('xl/worksheets/sheet' + i + '.xml');
+                            if (f) {
+                                promises.push(f.async('string').then(sheetXml => {
+                                    const parser = new DOMParser();
+                                    const doc = parser.parseFromString(sheetXml, 'text/xml');
+                                    const rows = doc.getElementsByTagName('row');
+                                    for (let r = 0; r < rows.length; r++) {
+                                        const cells = rows[r].getElementsByTagName('c');
+                                        const rowData = [];
+                                        for (let c = 0; c < cells.length; c++) {
+                                            const cell = cells[c];
+                                            const type = cell.getAttribute('t');
+                                            const vElem = cell.getElementsByTagName('v')[0];
+                                            const isElem = cell.getElementsByTagName('is')[0];
+                                            let value = '';
+                                            if (type === 's' && vElem) {
+                                                const idx = parseInt(vElem.textContent, 10);
+                                                value = sharedStrings[idx] || '';
+                                            } else if (type === 'inlineStr' && isElem) {
+                                                const t = isElem.getElementsByTagName('t')[0];
+                                                value = t ? t.textContent : '';
+                                            } else if (vElem) {
+                                                value = vElem.textContent;
+                                            }
+                                            if (value) rowData.push(value);
+                                        }
+                                        if (rowData.length > 0) allRows.push(rowData);
+                                    }
+                                }));
+                            }
+                        }
+                        return Promise.all(promises).then(() => {
+                            dbg('手动解析到 ' + allRows.length + ' 行数据');
+                            resolve(allRows);
+                        });
+                    });
+                }).catch(err => reject(err));
+            });
+        }
+
+        // SheetJS 备用解析（手动解析失败时使用）
+        function trySheetJSFallback(binary, dbg, input) {
+            if (typeof XLSX === 'undefined') {
+                dbg('SheetJS 未加载，无备用方案');
+                assignSeats([]);
+                return;
+            }
+            try {
+                const wb = XLSX.read(binary, { type: 'binary' });
+                const allRows = [];
+                wb.SheetNames.forEach(sheetName => {
+                    const ws = wb.Sheets[sheetName];
+                    if (!ws) return;
+                    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', blankrows: false });
+                    rows.forEach(r => allRows.push(r));
+                });
+                const names = extractNames(allRows);
+                dbg('SheetJS 备用识别到 ' + names.length + ' 个姓名');
+                if (names.length > 0) {
+                    assignSeats(names);
+                    input.value = '';
+                    debugDiv.style.display = 'none';
+                } else {
+                    assignSeats([]);
+                }
+            } catch (err) {
+                dbg('SheetJS 备用也失败: ' + err.message);
+                assignSeats([]);
+            }
+        }
+
         // 从文件导入学生名单（支持 Excel / txt / csv，按行列顺序自动排座）
         function importSeatsFromFile() {
             const input = document.getElementById('seatFileInput');
@@ -1285,50 +1399,48 @@
             const ext = file.name.split('.').pop().toLowerCase();
             const isExcel = ['xlsx', 'xls'].includes(ext);
 
+            // 调试输出区域（页面可见）
+            let debugDiv = document.getElementById('seatImportDebug');
+            if (!debugDiv) {
+                debugDiv = document.createElement('div');
+                debugDiv.id = 'seatImportDebug';
+                debugDiv.style.cssText = 'margin-top:10px;padding:8px;font-size:12px;background:#FFF3E0;border:1px solid #FFCC80;border-radius:4px;white-space:pre-wrap;font-family:monospace;display:none;';
+                input.parentNode.appendChild(debugDiv);
+            }
+            const dbg = (msg) => { debugDiv.style.display = 'block'; debugDiv.textContent += msg + '\n'; console.log(msg); };
+            debugDiv.style.display = 'none';
+            debugDiv.textContent = '';
+
             if (isExcel) {
+                dbg('开始导入 Excel 文件: ' + file.name + ' (' + file.size + ' bytes)');
                 const reader = new FileReader();
                 reader.onload = function(e) {
-                    let names = [];
-                    try {
-                        const data = e.target.result; // binary string
-                        const wb = XLSX.read(data, { type: 'binary' });
-                        // 尝试所有工作表，收集所有单元格
-                        const allRows = [];
-                        wb.SheetNames.forEach(sheetName => {
-                            const ws = wb.Sheets[sheetName];
-                            const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', blankrows: false });
-                            rows.forEach(r => allRows.push(r));
-                        });
-                        console.log('Excel 解析原始数据（所有工作表）:', allRows);
-                        // 拍平 + 拆分单元格内可能的分隔符，跳过表头关键字
-                        const headerKeywords = ['姓名', '名字', '学生', '学生姓名', 'name', '姓名/学号', '序号', '学号'];
-                        names = allRows.flat().flatMap(cell => {
-                            const s = String(cell || '').trim();
-                            if (!s) return [];
-                            if (headerKeywords.includes(s)) return [];
-                            return s.split(/[\r\n、，,；;\t]+/).map(x => x.trim()).filter(x => x !== '');
-                        });
-                        console.log('识别到姓名列表:', names);
-                    } catch (err) {
-                        console.error('Excel 解析失败:', err);
-                        alert('Excel 解析失败：' + err.message + '\n请尝试另存为 .csv 或 .txt 格式再导入。');
-                        return;
-                    }
-                    assignSeats(names);
-                    // 如果 Excel 解析为空，回退尝试文本读取
-                    if (names.length === 0) {
-                        try {
-                            const text = e.target.result;
-                            const fallbackNames = text.split(/[\r\n、，,；;\t]+/).map(s => s.trim()).filter(s => s !== '');
-                            console.log('回退文本解析姓名:', fallbackNames);
-                            if (fallbackNames.length > 0) {
-                                assignSeats(fallbackNames);
-                                return;
-                            }
-                        } catch (e2) { /* ignore */ }
-                    }
+                    const binary = e.target.result;
+                    const header = binary.substring(0, 2);
+                    dbg('文件头: ' + JSON.stringify(header) + (header === 'PK' ? ' (ZIP/xlsx 正确)' : ' (非 ZIP 格式！)'));
+
+                    // 主方案：手动解析（JSZip + XML），最可靠
+                    parseXlsxManual(binary, dbg).then(allRows => {
+                        dbg('手动解析原始数据: ' + JSON.stringify(allRows).substring(0, 300));
+                        const names = extractNames(allRows);
+                        dbg('识别到 ' + names.length + ' 个姓名: ' + JSON.stringify(names).substring(0, 300));
+                        if (names.length > 0) {
+                            assignSeats(names);
+                            input.value = '';
+                            debugDiv.style.display = 'none';
+                        } else {
+                            // 手动解析也为空，尝试 SheetJS 作为备用
+                            dbg('手动解析为空，尝试 SheetJS 备用...');
+                            trySheetJSFallback(binary, dbg, input);
+                        }
+                    }).catch(err => {
+                        dbg('手动解析失败: ' + err.message);
+                        dbg('尝试 SheetJS 备用...');
+                        trySheetJSFallback(binary, dbg, input);
+                    });
                 };
                 reader.onerror = function() {
+                    dbg('FileReader 读取失败');
                     alert('文件读取失败，请重试。');
                 };
                 reader.readAsBinaryString(file);
@@ -1337,11 +1449,15 @@
                 reader.onload = function(e) {
                     const text = e.target.result;
                     const names = text
-                        .split(/[\r\n、，,；;\t]+/)
+                        .split(/[\r\n、，,；;\t|]+/)
                         .map(s => s.trim())
                         .filter(s => s !== '');
-                    console.log('文本识别姓名:', names);
+                    dbg('文本识别到 ' + names.length + ' 个姓名: ' + JSON.stringify(names).substring(0, 300));
                     assignSeats(names);
+                    if (names.length > 0) {
+                        input.value = '';
+                        debugDiv.style.display = 'none';
+                    }
                 };
                 reader.readAsText(file, 'UTF-8');
             }
